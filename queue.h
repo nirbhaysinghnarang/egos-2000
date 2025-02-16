@@ -11,6 +11,10 @@
  * Clients of this package do not need to know how queues are
  * represented.  They see and manipulate only queue_t's.
  */
+
+
+#ifndef QUEUE_H
+#define QUEUE_H
 typedef struct queue *queue_t;
 
 /*
@@ -64,3 +68,5 @@ int queue_length(const queue_t queue);
  * Return 0 if the item was deleted, or -1 otherwise (item wasn't found).
  */
 int queue_delete(queue_t queue, void* item);
+
+#endif

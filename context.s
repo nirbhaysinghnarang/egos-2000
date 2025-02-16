@@ -1,5 +1,6 @@
 .section .text
 .global ctx_start, ctx_switch
+.extern ctx_entry   
 
 .macro SAVE_ALL_REGISTERS
     sw ra, 0(sp)
@@ -73,6 +74,9 @@
 /*                       ^             ^        */
 /*                       |             |        */
 /*                       a0            a1       */
+
+/* What does [ctx_start] do*/
+
 ctx_start:
     addi sp,sp,-128
     SAVE_ALL_REGISTERS
@@ -80,15 +84,24 @@ ctx_start:
     mv sp,a1          /* Switch to the stack of the newly created thread */
     call ctx_entry    /* Call ctx_entry(), which further calls the entry function of the newly created thread */
 
+
 /* void ctx_switch(void** old_sp, void* new_sp); */
 /*                        ^             ^        */
 /*                        |             |        */
 /*                        a0            a1       */
 ctx_switch:
     addi sp,sp,-128
+
     SAVE_ALL_REGISTERS
     sw sp,0(a0)       /* Remember the sp of the current thread */
+
+    
     mv sp,a1          /* Switch to the stack of the next thread */
+    
     RESTORE_ALL_REGISTERS
+
+    
     addi sp,sp,128
+    
+
     ret

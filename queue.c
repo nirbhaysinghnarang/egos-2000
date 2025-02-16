@@ -1,10 +1,9 @@
 #include "queue.h"
-#include <stdlib.h>
-#include <stdio.h>
 #include <assert.h>
+#include <stdlib.h>  // for itoa()
 
 //TODO: Add invariants and assertions here
-!
+
 
 /**
  We need enqueue to be O(1)
@@ -12,8 +11,12 @@
  where each node has a next ptr
  **/
 
-#define SUCCESS 0;
-#define FAILURE -1;
+#define SUCCESS 0
+#define FAILURE -1
+
+extern char __heap_start, __heap_max;
+static char* brk = &__heap_start;
+extern char* _sbrk(int size);
 
 
 typedef struct node {
@@ -62,7 +65,7 @@ node_t* create_node(void* item){
 
 
 int queue_enqueue(queue_t queue, void* item) {
-    assert(queue);
+    // assert(queue);
 
     // your code here
     // Must be O(1) (performance does not depend on length of queue)
@@ -88,7 +91,7 @@ int queue_enqueue(queue_t queue, void* item) {
 }
 
 int queue_insert(queue_t queue, void* item) {
-    assert(queue);
+    // assert(queue);
 
     // your code here
     // Must be O(1) (performance does not depend on length of queue)
@@ -113,7 +116,7 @@ int queue_insert(queue_t queue, void* item) {
 }
 
 int queue_dequeue(queue_t queue, void** pitem) {
-    assert(queue);
+    // assert(queue);
 
     // your code here
     // Must be O(1) (performance does not depend on length of queue)
@@ -170,8 +173,8 @@ int queue_dequeue(queue_t queue, void** pitem) {
 }
 
 void queue_iterate(const queue_t queue, queue_func_t f, void* context) {
-    assert(queue);
-    assert(f);
+    // assert(queue);
+    // assert(f);
 
     // your code here
     if(queue->size == 0){
@@ -196,7 +199,7 @@ void queue_iterate(const queue_t queue, queue_func_t f, void* context) {
 
 
 int queue_free(queue_t queue) {
-    assert(queue);
+    // assert(queue);
     // your code here
     // Must be O(1) (performance does not depend on length of queue)
     if(queue->size != 0){
@@ -207,14 +210,14 @@ int queue_free(queue_t queue) {
 }
 
 int queue_length(const queue_t queue) {
-    assert(queue);
+    // assert(queue);
     // your code here
     // Must be O(1) (performance does not depend on length of queue)
     return queue->size;
 }
 
 int queue_delete(queue_t queue, void* item) {
-    assert(queue);
+    // assert(queue);
     if (queue->size == 0) {
         return FAILURE;
     }
@@ -251,3 +254,5 @@ int queue_delete(queue_t queue, void* item) {
 }
 
 //And we're done
+
+

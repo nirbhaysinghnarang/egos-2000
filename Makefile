@@ -12,7 +12,7 @@ DEBUG_FLAGS = --source --all-headers --demangle --line-numbers --wide
 
 all:
 	@echo "$(YELLOW)-------- Compile Multi-threading --------$(END)"
-	$(RISCV_CC) $(CFLAGS) thread.s context.s thread.c -Tthread.lds $(LDFLAGS) -o thread.elf
+	$(RISCV_CC) $(CFLAGS) thread.s context.s thread.c queue.c -Tthread.lds $(LDFLAGS) -o thread.elf
 	$(OBJDUMP) $(DEBUG_FLAGS) thread.elf > thread.lst
 	$(OBJCOPY) -O binary thread.elf thread.bin
 

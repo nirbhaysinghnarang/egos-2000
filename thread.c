@@ -5,6 +5,7 @@
 #include "queue.h"
 #include "thread.h"
 #include <stdint.h>
+
 void terminal_write(const char *str, int len) {
     for (int i = 0; i < len; i++) {
         *(char*)(0x10000000UL) = str[i];
@@ -142,6 +143,9 @@ char* _sbrk(int size) {
     return old_brk;
 }
 
+/**
+ * Thread library begins
+ */
 
 
 struct thread {
@@ -152,52 +156,13 @@ struct thread {
     enum {
         READY,
         RUNNING,
-        BLOCKED,
-        TERMINATED,
-        PRIMORDIAL              //Before there was any light!
+        ASLEEP    
     } status;                   // Thread status
     void* original_sp;          // For dealloc
 };
 // queue_t ready_queue;   
 struct thread* current_thread;  
 queue_t ready_queue;
-void print_saved_registers(void* stack_ptr) {
-    uint32_t* regs = (uint32_t*)stack_ptr;
-    
-    log_("Saved Register Values:\n\r");
-    log_("ra  (x1) : %p\n\r", regs[0]);
-    log_("t0  (x5) : %p\n\r", regs[1]);
-    log_("t1  (x6) : %p\n\r", regs[2]);
-    log_("t2  (x7) : %p\n\r", regs[3]);
-    log_("t3  (x28): %p\n\r", regs[4]);
-    log_("t4  (x29): %p\n\r", regs[5]);
-    log_("t5  (x30): %p\n\r", regs[6]);
-    log_("t6  (x31): %p\n\r", regs[7]);
-    log_("a0  (x10): %p\n\r", regs[8]);
-    log_("a1  (x11): %p\n\r", regs[9]);
-    log_("a2  (x12): %p\n\r", regs[10]);
-    log_("a3  (x13): %p\n\r", regs[11]);
-    log_("a4  (x14): %p\n\r", regs[12]);
-    log_("a5  (x15): %p\n\r", regs[13]);
-    log_("a6  (x16): %p\n\r", regs[14]);
-    log_("a7  (x17): %p\n\r", regs[15]);
-    log_("s0  (x8) : %p\n\r", regs[16]);
-    log_("s1  (x9) : %p\n\r", regs[17]);
-    log_("s2  (x18): %p\n\r", regs[18]);
-    log_("s3  (x19): %p\n\r", regs[19]);
-    log_("s4  (x20): %p\n\r", regs[20]);
-    log_("s5  (x21): %p\n\r", regs[21]);
-    log_("s6  (x22): %p\n\r", regs[22]);
-    log_("s7  (x23): %p\n\r", regs[23]);
-    log_("s8  (x24): %p\n\r", regs[24]);
-    log_("s9  (x25): %p\n\r", regs[25]);
-    log_("s10 (x26): %p\n\r", regs[26]);
-    log_("s11 (x27): %p\n\r", regs[27]);
-    log_("gp  (x3) : %p\n\r", regs[28]);
-    log_("tp  (x4) : %p\n\r", regs[29]);
-    log_("sp  (x2) : %p\n\r", regs[30]);
-}
-
 
 void thread_init() {
     //Initialize ready queue
@@ -262,7 +227,6 @@ void thread_create(void (*entry)(void *arg), void *arg){
         (new_thread->current_sp)
     );
 }
-
 // Only supposed to yield to another thread.
 void thread_yield() {
 
@@ -275,7 +239,7 @@ void thread_yield() {
     struct thread* tmp = current_thread;
     log_("[thread_yield] Current thread ID: %d\n\r", tmp->id);
 
-
+    
 
     if(queue_dequeue(ready_queue, &thread_ptr) != 0){
         log_("[thread_yield] Could not dequeue!");
@@ -284,7 +248,12 @@ void thread_yield() {
     struct thread* new_thread = (struct thread*)thread_ptr;
     log_("[thread_yield] Switching to thread ID: %d\n\r", new_thread->id);
     
-    queue_enqueue(ready_queue, current_thread);
+
+    
+    if (current_thread->status == READY) { // Only enqueue if READY
+        queue_enqueue(ready_queue, tmp);
+    }    
+    
     current_thread = new_thread;
 
     log_("[thread_yield] Context switch from thread ID: %d to thread ID: %d\n\r", tmp->id, new_thread->id);
@@ -298,6 +267,10 @@ void thread_yield() {
 }
 
 void thread_exit() {
+
+
+
+
     log_("[thread_exit] Exiting thread ID: %d\n\r", current_thread->id);
     if (current_thread->original_sp) {
         log_("[thread_exit] Freeing original stack pointer for thread ID: %d\n\r", current_thread->id);
@@ -309,7 +282,11 @@ void thread_exit() {
     if (queue_dequeue(ready_queue, &thread_ptr) != 0) {
         log_("[thread_exit] No more threads to run!\n\r");
         while(1) {;} // No more threads, halt
+    }else{
+        log_("[thread_exit] There are %d more threads to run!", queue_length(ready_queue));
     }
+
+    
 
     struct thread* next_thread = (struct thread*)thread_ptr;    
     log_("[thread_exit] Freeing current thread structure for thread ID: %d\n\r", current_thread->id);
@@ -346,27 +323,148 @@ void ctx_entry() {
 }
 
 
-void child(void* arg) {
-    char* name = (char*)arg;
-    for (int i = 0; i < 5; i++) {
-        printf("Thread %s counting: %d\n\r", name, i);
+/**
+ * Thread library ends
+ */
+
+
+/**
+ * Conditional Variable section begins
+ */
+
+
+// A thread will invoke cv_wait or cv_signal on 
+//a conditional variable.
+
+//Sketching out a possible solution below
+//[cv] contains two fields: waiting (bool) and list of waiting threads (is the first even needed - no!)
+//[cv] simply contains a list of waiting threads
+//on [cv_wait], add calling thread to list...change status to waiting in TCB (somehow pause execution? - trap in while loop with yield?)
+//on [cv_signal] change all threads to READY (add to ready queue?)
+
+static int cv_id_counter = 0;
+struct cv {
+    // Design this struct yourself.
+    queue_t wait_queue;
+    int id;
+    char* name;
+};
+
+
+void cv_create(struct cv* condition, char* name){
+    condition->wait_queue = queue_new();
+    condition->id = cv_id_counter++;
+    condition->name = name;
+}
+void cv_wait(struct cv* condition){
+    //Get currently running thread.
+    //Add to condition wait queue.
+    //change status
+    //while status is unchaned,yield
+
+
+    log_("Adding thread %d to CV %s's wait queue", current_thread->id, condition->name);
+    if(queue_enqueue(condition->wait_queue,current_thread) != 0) {
+        log_("[cv_wait] Could not enqueue for CV %s", condition->name);
+    }else{
+        log_("[cv_wait] Enqueued thread %d for CV %s", current_thread->id, condition->name);
+    }
+    current_thread->status = ASLEEP;
+    while(current_thread->status == ASLEEP){
         thread_yield();
     }
 }
 
-int main() {
-    thread_init();
-    
-    // Create multiple children with different names
-    thread_create(child, "Alpha");
-    thread_create(child, "Beta");
-    thread_create(child, "Gamma");
-    
-    // Main thread also counts
-    for (int i = 0; i < 5; i++) {
-        printf("Main thread counting: %d\n\r", i);
-        thread_yield();
+void cv_signal(struct cv* condition) {
+    struct thread* waiting_thread = NULL;
+    if (queue_dequeue(condition->wait_queue, (void**)&waiting_thread) == 0) {
+        log_("Removing thread %d from CV %s's wait queue", waiting_thread->id, condition->name);
+        waiting_thread->status = READY;
+        queue_insert(ready_queue, waiting_thread);
+        log_("Inserted thread %d to ready queue.", waiting_thread->id);
+    }else{
+        log_("Dequeue failed bruh");
     }
+
+}
+
+
+
+/**
+ * Conditional Variable section ends
+ */
+
+
+// void child(void* arg) {
+//     char* name = (char*)arg;
+//     for (int i = 0; i < 5; i++) {
+//         printf("Thread %s counting: %d\n\r", name, i);
+//         thread_yield();
+//     }
+// }
+
+// int main() {
+//     thread_init();
     
+//     // Create multiple children with different names
+//     thread_create(child, "Alpha");
+//     thread_create(child, "Beta");
+//     thread_create(child, "Gamma");
+    
+//     // Main thread also counts
+//     for (int i = 0; i < 5; i++) {
+//         printf("Main thread counting: %d\n\r", i);
+//         thread_yield();
+//     }
+    
+//     thread_exit();
+// }
+
+
+void* buffer[3];
+int count = 0;
+int head = 0, tail = 0;
+struct cv nonempty, nonfull;
+
+void produce(void* item) {
+    for (int i = 0; i < 10; i++) {
+        printf("[produce] Pre-wait Current Count is %d\n\r", count);
+
+        while (count == 3) cv_wait(&nonfull);
+        printf("[produce] Current Count is %d\n\r", count);
+
+        // At this point, the buffer is not full.
+        buffer[tail] = item;
+        tail = (tail + 1) % 3;
+        count += 1;
+        cv_signal(&nonempty);
+    }
+}
+
+void* consume() {
+    while (1) {
+        printf("[consume] Pre-wait Current Count is %d\n\r", count);
+        while (count == 0) cv_wait(&nonempty);
+        printf("[consume] Current Count is %d\n\r", count);
+
+        // At this point, the buffer is not empty.
+        void* result = buffer[head];
+        head = (head + 1) % 3;
+        count -= 1;
+        cv_signal(&nonfull);
+    }
+}
+
+int main() {
+    // Initialize the thread library.
+    thread_init();
+    cv_create(&nonempty, "CONSUMER");
+    cv_create(&nonfull, "PRODUCER");
+    thread_create((void (*)(void*)) consume, NULL);
+    char *item = "Produced item";
+    thread_create(produce, item);
+    printf("All done...\n\r");
     thread_exit();
+
+    return 0;
 }

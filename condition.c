@@ -1,0 +1,76 @@
+#include "queue.h"
+#include "out.h"
+#include "thread.h"
+#include "condition.h"
+#include <stdlib.h>  // for itoa()
+
+static int cv_id_counter = 0;
+
+
+// A thread will invoke cv_wait or cv_signal on 
+//a conditional variable.
+
+//Sketching out a possible solution below
+//[cv] contains two fields: waiting (bool) and list of waiting threads (is the first even needed - no!)
+//[cv] simply contains a list of waiting threads
+//on [cv_wait], add calling thread to list...change status to waiting in TCB (somehow pause execution? - trap in while loop with yield?)
+//on [cv_signal] change all threads to READY (add to ready queue?)
+
+
+void cv_create(struct cv* condition, char* name){
+    condition->wait_queue = queue_new();
+    condition->id = cv_id_counter++;
+    condition->name = name;
+}
+
+void cv_wait(struct cv* condition){
+    //Get currently running thread.
+    //Add to condition wait queue.
+    //change status
+    //while status is unchaned,yield
+
+    log_d("Adding thread %d to CV %s's wait queue", current_thread->id, condition->name);
+    if(queue_insert(condition->wait_queue,current_thread) != 0) {
+        log_d("[cv_wait] Could not enqueue for CV %s", condition->name);
+    }else{
+        log_d("[cv_wait] Enqueued thread %d for CV %s", current_thread->id, condition->name);
+    }
+    current_thread->status = ASLEEP;
+    while(current_thread->status == ASLEEP){
+        thread_yield();
+    }
+}
+
+void cv_signal(struct cv* condition) {
+    struct thread* waiting_thread = NULL;
+    if (queue_dequeue(condition->wait_queue, (void**)&waiting_thread) == 0) {
+        log_d("Removing thread %d from CV %s's wait queue", waiting_thread->id, condition->name);
+        waiting_thread->status = READY;
+        queue_insert(ready_queue, waiting_thread);
+        log_d("[cv_signal] Yielding!\n\r");
+        log_d("Inserted thread %d to ready queue.", waiting_thread->id);
+
+        /**
+         * 
+         * 
+         * In this test, if we add a [thread_yield] above, here
+         * is what happens:
+         *  
+         * -  We start off with consumer
+         * -  Buffer is empty
+         * -  Consumer must wait! 
+         * -  main takes charge!
+         * -  main creates producer
+         * -  producer fills up buffer ()
+         * -  we signal here
+         * -  we switch to consumer
+         * -  consumer eats the singular item in the buffer
+         * -  then it adds itself to the wait queue for its CV
+         * -  it yields!
+         * -  at this point, what's in the ready_queue?
+         * -  main()! [why?]
+         */
+    }else{
+        log_d("Dequeue failed for CV %s", condition->name);
+    }
+}

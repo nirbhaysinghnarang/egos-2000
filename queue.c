@@ -67,7 +67,6 @@ node_t* create_node(void* item){
 
 
 int queue_enqueue(queue_t queue, void* item) {
-    log_("Enqueueing item!");
 
     // assert(queue);
 
@@ -95,7 +94,6 @@ int queue_enqueue(queue_t queue, void* item) {
 }
 
 int queue_insert(queue_t queue, void* item) {
-    log_("Inserting item!");
     // assert(queue);
 
     // your code here
@@ -121,7 +119,6 @@ int queue_insert(queue_t queue, void* item) {
 }
 
 int queue_dequeue(queue_t queue, void** pitem) {
-    log_("Dequeing item!");
 
     // assert(queue);
 

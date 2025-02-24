@@ -4,24 +4,16 @@
 #include <assert.h>
 #include <stdint.h>
 
-
 #include "out.h"
 #include "queue.h"
 #include "thread.h"
 #include "condition.h"
 
 
+//MARK: Define assembly functions
 extern void ctx_switch(void *old_sp, void* new_sp);
 extern void ctx_start(void *old_sp, void* new_sp);
 
-
-#define MAX_QUEUE_SZ 32
-#define STACK_SZ (16 * 1024)  // 16 KB in bytes
-static int next_thread_id = 1;  // Start at 1 since main is 0
-
-/**
- * This increases the program's data space by a specified amount, size. 
- */
 extern char __heap_start, __heap_max;
 static char* brk = &__heap_start;
 char* _sbrk(int size) {
@@ -35,6 +27,11 @@ char* _sbrk(int size) {
     return old_brk;
 }
 
+
+
+#define MAX_QUEUE_SZ 32
+#define STACK_SZ (16 * 1024)  // 16 KB in bytes
+static int next_thread_id = 1;  // Start at 1 since main is 0
 
 
 // queue_t ready_queue;   
@@ -57,14 +54,12 @@ void thread_init() {
     //malloc returns a memory address, store that in current_sp
     void* addr = malloc(STACK_SZ);
     current_thread->id = 0; 
-    current_thread->current_sp = addr + STACK_SZ;     // Point to the allocated memory address
+    current_thread->current_sp = addr + STACK_SZ;     // Point to top of allocated memory.
     current_thread->original_sp = addr ;
     current_thread->entry_fn = NULL;   
     current_thread->arg = NULL;
     current_thread->status = RUNNING;   
 }
-
-
 
 void thread_create(void (*entry)(void *arg), void *arg){
 
@@ -121,10 +116,10 @@ void thread_yield() {
     struct thread* new_thread = (struct thread*)thread_ptr;
     log_d("[thread_yield] Switching to thread ID: %d\n\r", new_thread->id);
     
-
     
-    if (current_thread->status == READY) { // Only enqueue if READY
+    if (current_thread->status != ASLEEP) { // Only enqueue if not asleep
         queue_enqueue(ready_queue, tmp);
+        current_thread->status = READY;
     }    
     
     current_thread = new_thread;
@@ -232,7 +227,6 @@ void* consume() {
         cv_signal(&nonfull);
     }
 }
-
 
 void* greedy_consume() {
     while (1) {

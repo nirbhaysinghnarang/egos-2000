@@ -13,5 +13,5 @@ struct cv {
 void cv_create(struct cv* condition, char* name);
 void cv_wait(struct cv* condition); 
 void cv_signal(struct cv* condition);
-
+void cv_release(struct cv* condition);
 #endif

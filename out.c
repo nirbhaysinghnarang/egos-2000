@@ -115,7 +115,6 @@ int printf(const char* format, ...) {
 
 
 void log_d(const char* message, ...) {
-    return;
     char buf[512] = "";
   
     // Format the actual message

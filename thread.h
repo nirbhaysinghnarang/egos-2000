@@ -11,7 +11,8 @@ struct thread {
     enum {
         READY,
         RUNNING,
-        ASLEEP    
+        ASLEEP,
+        TERMINATED    
     } status;                  
     void* original_sp;         
 };

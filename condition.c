@@ -49,28 +49,16 @@ void cv_signal(struct cv* condition) {
         queue_insert(ready_queue, waiting_thread);
         log_d("[cv_signal] Yielding!\n\r");
         log_d("Inserted thread %d to ready queue.", waiting_thread->id);
-
-        /**
-         * 
-         * 
-         * In this test, if we add a [thread_yield] above, here
-         * is what happens:
-         *  
-         * -  We start off with consumer
-         * -  Buffer is empty
-         * -  Consumer must wait! 
-         * -  main takes charge!
-         * -  main creates producer
-         * -  producer fills up buffer ()
-         * -  we signal here
-         * -  we switch to consumer
-         * -  consumer eats the singular item in the buffer
-         * -  then it adds itself to the wait queue for its CV
-         * -  it yields!
-         * -  at this point, what's in the ready_queue?
-         * -  main()! [why?]
-         */
     }else{
         log_d("Dequeue failed for CV %s", condition->name);
+    }
+}
+
+void cv_release(struct cv* condition){
+    if(queue_length((condition->wait_queue)) == 0){
+        queue_free(condition->wait_queue);
+        log_d("CV %s is a free elf!", condition->name);
+    }else{
+        log_e("Oops, big man! Can't release a CV with threads hanging!");
     }
 }

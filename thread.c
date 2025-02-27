@@ -10,6 +10,9 @@
 #include "condition.h"
 
 
+//QUESTIONS:
+//is null sp/orig sp good enough proxy for main?
+
 //MARK: Define assembly functions
 extern void ctx_switch(void *old_sp, void* new_sp);
 extern void ctx_start(void *old_sp, void* new_sp);
@@ -101,30 +104,54 @@ void thread_create(void (*entry)(void *arg), void *arg){
 }
 
 void cleanup_terminated_thread() {
-    if (previously_ran_thread){
-        log_d("[cleanup] Prev Ran Thread ID: %d", previously_ran_thread->id);
-        if(previously_ran_thread->original_sp == NULL){
-            log_d("[cleanup] Skipping main thread cleanup");
-            return; //Don't clean up the MAIN thread
-
-        }
-        if (previously_ran_thread && previously_ran_thread->status == TERMINATED) {
-            log_d("[cleanup] Freeing terminated thread ID: %d\n\r", previously_ran_thread->id);
-            if (previously_ran_thread->original_sp) {
-                free(previously_ran_thread->original_sp);
-            }
-            
-            free(previously_ran_thread);
-            previously_ran_thread = NULL;
-        }else{
-            log_d("[cleanup] No thread to cleanup");
-        }
-    }else{
+    if (!previously_ran_thread) {
         log_d("[cleanup] No thread to cleanup!");
+        return;
     }
-  
+    
+    log_d("[cleanup] Prev Ran Thread ID: %d", previously_ran_thread->id);
+
+    if (previously_ran_thread->original_sp == NULL && 
+        previously_ran_thread->status != TERMINATED) {
+        log_d("[cleanup] Skipping main thread cleanup - not terminated");
+        return;
+    }
+    
+    if (previously_ran_thread->status == TERMINATED) {
+        log_d("[cleanup] Freeing terminated thread ID: %d\n\r", previously_ran_thread->id);
+        if (previously_ran_thread->original_sp) {
+            free(previously_ran_thread->original_sp);
+        }
+        
+        free(previously_ran_thread);
+        previously_ran_thread = NULL;
+    } else {
+        log_d("[cleanup] Thread not terminated, skipping cleanup");
+    }
 }
 
+
+void thread_cleanup(){
+
+    //FREE any rogue threads (as long as they're not MAIN)
+    if(previously_ran_thread->original_sp){
+        free(previously_ran_thread->original_sp);
+        free(previously_ran_thread);
+    }
+    if(current_thread->original_sp){
+        free(current_thread->original_sp);
+        free(current_thread);
+
+    }
+
+    if(queue_length(ready_queue) != 0){
+        log_e("Ooops! The run queue is not empty. This should NEVER happen");
+        return;
+    }
+    free(ready_queue);
+    current_thread = NULL;
+    previously_ran_thread = NULL;
+}
 
 // Only supposed to yield to another thread.
 void thread_yield() {
@@ -174,6 +201,7 @@ void thread_exit() {
     if (queue_dequeue(ready_queue, &thread_ptr) != 0) {
         log_d("[thread_exit] No more threads to run!\n\r");
         // while(1) {;} // No more threads, halt
+        thread_cleanup();
         return;
     }else{
         log_d("[thread_exit] There are %d more threads to run!", queue_length(ready_queue));

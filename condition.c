@@ -37,6 +37,7 @@ void cv_wait(struct cv* condition){
     }
     current_thread->status = ASLEEP;
     while(current_thread->status == ASLEEP){
+        log_d("[cv_wait] Asleep, yielding\n\r");
         thread_yield();
     }
 }
@@ -46,7 +47,7 @@ void cv_signal(struct cv* condition) {
     if (queue_dequeue(condition->wait_queue, (void**)&waiting_thread) == 0) {
         log_d("Removing thread %d from CV %s's wait queue", waiting_thread->id, condition->name);
         waiting_thread->status = READY;
-        queue_insert(ready_queue, waiting_thread);
+        queue_enqueue(ready_queue, waiting_thread);
         log_d("[cv_signal] Yielding!\n\r");
         log_d("Inserted thread %d to ready queue.", waiting_thread->id);
     }else{

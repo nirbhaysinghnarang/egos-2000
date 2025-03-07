@@ -58,7 +58,7 @@ void thread_init() {
     //malloc returns a memory address, store that in current_sp
     current_thread->id = 0; 
     current_thread->current_sp = NULL;    // Point to top of allocated memory.
-    current_thread->original_sp = NULL ;
+    current_thread->original_sp = NULL; 
     current_thread->entry_fn = NULL;   
     current_thread->arg = NULL;
     current_thread->status = RUNNING;   
@@ -83,7 +83,8 @@ void thread_create(void (*entry)(void *arg), void *arg){
 
 
 
-    int num_threads = queue_length(ready_queue);
+    //int num_threads = queue_length(ready_queue);
+
     new_thread->id = next_thread_id++;
     new_thread->original_sp = malloc(STACK_SZ) ;
     new_thread->current_sp = new_thread->original_sp + STACK_SZ;
@@ -141,7 +142,6 @@ void thread_cleanup(){
     if(current_thread->original_sp){
         free(current_thread->original_sp);
         free(current_thread);
-
     }
 
     if(queue_length(ready_queue) != 0){
@@ -168,7 +168,14 @@ void thread_yield() {
 
     if(queue_dequeue(ready_queue, &thread_ptr) != 0){
         log_e("[thread_yield] Could not dequeue!");
-        return;
+        log_e("[thread_yield] ready q has size %d \n\r", queue_length(ready_queue));
+
+        if(current_thread->status == ASLEEP){
+            log_d("[thread_yield] Asleep thread, no one to wake\n\r");
+            while (1){;}
+        }
+
+        
     }
     struct thread* new_thread = (struct thread*)thread_ptr;
     log_d("[thread_yield] Switching to thread ID: %d\n\r", new_thread->id);
@@ -200,9 +207,8 @@ void thread_exit() {
     void* thread_ptr;
     if (queue_dequeue(ready_queue, &thread_ptr) != 0) {
         log_d("[thread_exit] No more threads to run!\n\r");
-        // while(1) {;} // No more threads, halt
-        thread_cleanup();
-        return;
+        while(1) {;} // No more threads, halt
+        // return;
     }else{
         log_d("[thread_exit] There are %d more threads to run!", queue_length(ready_queue));
     }
@@ -222,13 +228,13 @@ void ctx_entry() {
     }
     void* thread_ptr;
     if(queue_dequeue(ready_queue, &thread_ptr) == 0) {
-
         if (current_thread != NULL) {
             queue_enqueue(ready_queue, current_thread);
         }
         current_thread = (struct thread*)thread_ptr;
         log_d("[ctx_entry] Dequeued thread with ID %d\n\r", current_thread->id);
         current_thread->entry_fn(current_thread->arg);
+
         thread_exit();
     } else {
         log_e("[ctx_entry] Dequeue failed!\n\r");
@@ -241,68 +247,62 @@ void ctx_entry() {
  * ASM CODE POINTS HERE.
  */
 
+// int main() {
+//     // Stack variables to check if they're preserved across yields
+//     run();
+//     printf("HEY!\n\r");
+//     return 0;
+// }
+void* buffer[3];
+int count = 0;
+int head = 0, tail = 0;
+struct cv nonempty, nonfull;
 
-volatile int yield_counter = 0;
+void produce(void* item) {
+    for (int i = 0; i < 10; i++) {
+    // while(1){
+        printf("[produce] Pre-wait Current Count is %d\n\r", count);
 
-// Function for the child thread
-void child_thread(void *arg) {
-    char *name = (char *)arg;
-    
-    log_d("[child_thread] Thread %s started, counter: %d\n\r", name, yield_counter);
-    yield_counter++;
-    
-    // Yield back to main thread
-    log_d("[child_thread] Thread %s yielding to main, counter: %d\n\r", name, yield_counter);
-    thread_yield();
-    
-    // Should come back here after main yields
-    log_d("[child_thread] Thread %s resumed after main, counter: %d\n\r", name, yield_counter);
-    yield_counter++;
-    
-    // Exit the thread
-    log_d("[child_thread] Thread %s exiting, counter: %d\n\r", name, yield_counter);
-    thread_exit();
+        while (count == 3) cv_wait(&nonfull);
+        printf("[produce] Current Count is %d\n\r", count);
+
+        // At this point, the buffer is not full.
+        buffer[tail] = item;
+        tail = (tail + 1) % 3;
+        count += 1;
+        cv_signal(&nonempty);
+    }
 }
 
-void run(){ 
-    int stack_var1 = 42;
-    char stack_var2[20] = "hello world";
-    
-    // Initialize the threading system
-    thread_init();
-    
-    log_d("[main] Main thread started, stack variables: %d, %s\n\r", stack_var1, stack_var2);
-    log_d("[main] Counter: %d\n\r", yield_counter);
-    
-    // Create a new thread
-    log_d("[main] Creating child thread\n\r");
-        char bigStack[17*1024];
+void* consume() {
+    while (1) {
+        printf("[consume] Pre-wait Current Count is %d\n\r", count);
+        while (count == 0) cv_wait(&nonempty);
+        printf("[consume] Current Count is %d\n\r", count);
 
-    thread_create(child_thread, "Child1");
-    
-    // At this point, thread_create has already yielded to the child thread
-    // and the child has yielded back to us
-    
-    log_d("[main] Back in main after first yield, counter: %d\n\r", yield_counter);
-    log_d("[main] Stack variables after yield: %d, %s\n\r", stack_var1, stack_var2);
-    yield_counter++;
-    
-    // Yield again to let child thread finish
-    log_d("[main] Main yielding again, counter: %d\n\r", yield_counter);
-    thread_yield();
-    
-    // Should come back here after child thread exits
-    log_d("[main] Back in main after child exits, counter: %d\n\r", yield_counter);
-    log_d("[main] Final stack variables: %d, %s\n\r", stack_var1, stack_var2);
-    
-    log_d("[main] Test complete\n\r");
-    thread_exit();
-    
+        // At this point, the buffer is not empty.
+        void* result = buffer[head];
+        head = (head + 1) % 3;
+        count -= 1;
+        cv_signal(&nonfull);
+    }
 }
+
+
 
 int main() {
+    // Initialize the thread library.
+    thread_init();
+    cv_create(&nonempty, "CONSUMER");
+    cv_create(&nonfull, "PRODUCER");
+    thread_create((void (*)(void*)) consume, NULL);
+    // thread_create((void (*)(void*)) greedy_consume, NULL);
+
+    char *item = "Produced item";
+    thread_create(produce, item);
+    printf("All done...\n\r");
+    thread_exit();
+
     // Stack variables to check if they're preserved across yields
-    run();
-    printf("HEY!\n\r");
     return 0;
 }
